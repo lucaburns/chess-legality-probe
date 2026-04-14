@@ -1,0 +1,41 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# uv-managed local environment
+.venv/
+
+# OS and editor noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model checkpoints and large ML artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# Temporary files and local outputs
+*.tmp
+*.temp
+*.bak
+*.log
+tmp/
+temp/
+outputs/
+results/
+runs/
+
+# Local external checkouts and generated activation dumps
+chess_gpt_eval/
+nanogpt/out/
+nanogpt/activations/
