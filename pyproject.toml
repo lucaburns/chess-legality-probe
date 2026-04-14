@@ -1,0 +1,14 @@
+[project]
+name = "chess-legality-probe"
+version = "0.1.0"
+description = "Layer-wise legality probes for Chess-GPT."
+requires-python = ">=3.12"
+dependencies = [
+    "torch",
+    "chess",
+    "numpy",
+    "tiktoken",
+]
+
+[tool.uv]
+package = false
