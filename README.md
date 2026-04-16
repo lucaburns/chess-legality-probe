@@ -29,15 +29,19 @@ git clone https://github.com/adamkarvonen/chess_gpt_eval.git ../chess_gpt_eval
 uv sync
 ```
 
-Download a checkpoint from `https://huggingface.co/adamkarvonen/chess_llms` and
-place it in:
+Download a checkpoint from `https://huggingface.co/adamkarvonen/chess_llms`
+into the location expected by `chess_gpt_eval`:
 
-```text
-../chess_gpt_eval/nanogpt/out/
+```bash
+mkdir -p ../chess_gpt_eval/nanogpt/out
+curl -L \
+  -o ../chess_gpt_eval/nanogpt/out/stockfish_16layers_ckpt_no_optimizer.pt \
+  https://huggingface.co/adamkarvonen/chess_llms/resolve/main/stockfish_16layers_ckpt_no_optimizer.pt
 ```
 
 The original repo README recommends `stockfish_16layers_ckpt_no_optimizer.pt` as
-the strongest model.
+the strongest model. To use a different checkpoint from that page, replace the
+filename in both the `-o` path and the Hugging Face URL.
 
 Run:
 
