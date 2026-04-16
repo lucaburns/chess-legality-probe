@@ -1,7 +1,6 @@
 # Chess Legality Probe
 
-This is a small working prototype of the proposal in `callum-LLM-Project-Proposal.pdf`.
-The full project asks whether a chess-playing language model internally represents a
+We ask whether a chess-playing language model internally represents a
 legality signal before it emits an illegal move. This version keeps the experimental
 shape in two stages:
 
@@ -11,17 +10,17 @@ shape in two stages:
 
 ## Chess-GPT Version
 
-This is the version that directly matches the proposal. It:
+We do the following:
 
-1. Loads a local `chess_gpt_eval` checkout.
-2. Loads a NanoGPT chess checkpoint from `chess_gpt_eval/nanogpt/out/`.
-3. Generates random reachable chess positions.
-4. Formats prompts the same compact PGN way as `nanogpt/nanogpt_module.py`.
-5. Captures each transformer block's residual stream at the final prompt token,
+1. Load a local `chess_gpt_eval` checkout.
+2. Load a NanoGPT chess checkpoint from `chess_gpt_eval/nanogpt/out/`.
+3. Generate random reachable chess positions.
+4. Format prompts the same compact PGN way as `nanogpt/nanogpt_module.py`.
+5. Capture each transformer block's residual stream at the final prompt token,
    immediately before move generation.
-6. Generates Chess-GPT's next move and labels it legal or illegal with
+6. Generate Chess-GPT's next move and label it legal or illegal with
    `python-chess`.
-7. Trains one linear probe per layer and reports layer-wise accuracy.
+7. Train one linear probe per layer and report layer-wise accuracy.
 
 Setup:
 
