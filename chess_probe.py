@@ -3,6 +3,16 @@
 This is a dependency-free prototype of the project proposal. It does not load a
 Chess-GPT checkpoint; instead it builds a controlled probe task with chess-board
 features that stand in for progressively richer residual-stream representations.
+
+Changes from the first draft:
+- Illegal-move sampling prefers "hard negatives" -- pseudo-legal moves that
+  leave the king in check -- so the task isn't trivially solvable from the
+  candidate-square features alone.
+- Feature ablations are reported both cumulatively (what you can predict given
+  everything up to depth k) and individually (what each block contributes on
+  its own), so the ladder isn't dominated by the tactical-legality oracle.
+- A majority-class baseline is printed alongside the probes.
+- K-fold cross-validation gives a noise estimate instead of a single split.
 """
 
 from __future__ import annotations
@@ -11,7 +21,7 @@ from dataclasses import dataclass
 import argparse
 import math
 import random
-from typing import Iterable
+from typing import Callable, Iterable
 
 
 WHITE = "w"
@@ -19,18 +29,8 @@ BLACK = "b"
 EMPTY = "."
 PIECES = "PNBRQKpnbrqk"
 PIECE_VALUES = {
-    "P": 1.0,
-    "N": 3.0,
-    "B": 3.0,
-    "R": 5.0,
-    "Q": 9.0,
-    "K": 0.0,
-    "p": -1.0,
-    "n": -3.0,
-    "b": -3.0,
-    "r": -5.0,
-    "q": -9.0,
-    "k": 0.0,
+    "P": 1.0, "N": 3.0, "B": 3.0, "R": 5.0, "Q": 9.0, "K": 0.0,
+    "p": -1.0, "n": -3.0, "b": -3.0, "r": -5.0, "q": -9.0, "k": 0.0,
 }
 
 
@@ -285,17 +285,30 @@ def random_position(rng: random.Random, max_plies: int) -> Board:
     return board
 
 
-def corrupt_move(board: Board, move: Move, rng: random.Random) -> Move:
+def sample_illegal_move(board: Board, rng: random.Random) -> Move | None:
+    """Prefer hard negatives: pseudo-legal moves that leave own king in check.
+
+    Falls back to off-board / same-color-capture style garbage only if no
+    pseudo-legal-but-illegal candidates exist (e.g. rare forced positions).
+    """
+    pseudo = pseudo_moves(board)
     legal_uci = {m.uci() for m in legal_moves(board)}
+    hard = [m for m in pseudo if m.uci() not in legal_uci]
+    if hard:
+        return rng.choice(hard)
+
+    own = [i for i, p in enumerate(board.squares) if piece_color(p) == board.turn]
+    if not own:
+        return None
     for _ in range(128):
-        if rng.random() < 0.5:
-            candidate = Move(move.start, rng.randrange(64))
-        else:
-            own = [i for i, p in enumerate(board.squares) if piece_color(p) == board.turn]
-            candidate = Move(rng.choice(own), rng.randrange(64))
-        if candidate.start != candidate.end and candidate.uci() not in legal_uci:
+        start = rng.choice(own)
+        end = rng.randrange(64)
+        if start == end:
+            continue
+        candidate = Move(start, end)
+        if candidate.uci() not in legal_uci:
             return candidate
-    return Move(move.start, (move.end + 9) % 64)
+    return None
 
 
 @dataclass
@@ -314,9 +327,12 @@ def make_dataset(seed: int, positions: int, max_plies: int) -> list[Example]:
         moves = legal_moves(board)
         if not moves:
             continue
+        illegal = sample_illegal_move(board, rng)
+        if illegal is None:
+            continue
         legal = rng.choice(moves)
         examples.append(Example(board, legal, 1))
-        examples.append(Example(board, corrupt_move(board, legal, rng), 0))
+        examples.append(Example(board, illegal, 0))
         seen_positions += 1
     rng.shuffle(examples)
     return examples
@@ -329,16 +345,9 @@ def material_features(board: Board, move: Move) -> list[float]:
     return [1.0, own_material / 39.0]
 
 
-def board_features(board: Board, move: Move) -> list[float]:
-    del move
-    features: list[float] = []
-    for piece in PIECES:
-        features.extend(1.0 if square == piece else 0.0 for square in board.squares)
-    features.append(1.0 if board.turn == WHITE else -1.0)
-    return features
-
-
 def candidate_features(board: Board, move: Move) -> list[float]:
+    """Move-geometry features. Always included: predicting legality of move X
+    without seeing X at all is a degenerate task."""
     piece = board.squares[move.start]
     target = board.squares[move.end]
     same_color_capture = piece != EMPTY and target != EMPTY and piece_color(piece) == piece_color(target)
@@ -358,32 +367,126 @@ def candidate_features(board: Board, move: Move) -> list[float]:
     ]
 
 
-def tactical_features(board: Board, move: Move) -> list[float]:
+def piece_context_features(board: Board, move: Move) -> list[float]:
+    """What's at the source, destination, and immediate neighbourhood of the move.
+
+    Avoids the full 769-dim board-state blowup (which a tiny probe can't fit
+    on a few hundred examples) while still giving the probe enough context to
+    resolve many pseudo-legal-but-illegal cases.
+    """
+    features: list[float] = []
+    for square in (move.start, move.end):
+        piece = board.squares[square]
+        for letter in PIECES:
+            features.append(1.0 if piece == letter else 0.0)
+        features.append(1.0 if piece == EMPTY else 0.0)
+    # Count same-colour pieces adjacent to destination (crude defender signal).
+    dr_df = [(dr, df) for dr in (-1, 0, 1) for df in (-1, 0, 1) if (dr, df) != (0, 0)]
+    own_adjacent = 0
+    enemy_adjacent = 0
+    for dr, df in dr_df:
+        sq = to_square(rank_of(move.end) + dr, file_of(move.end) + df)
+        if sq is None:
+            continue
+        p = board.squares[sq]
+        if p == EMPTY:
+            continue
+        if piece_color(p) == board.turn:
+            own_adjacent += 1
+        else:
+            enemy_adjacent += 1
+    features.append(own_adjacent / 8.0)
+    features.append(enemy_adjacent / 8.0)
+    return features
+
+
+def king_safety_features(board: Board, move: Move) -> list[float]:
+    """King-safety signal without directly leaking the legal/pseudo-legal label.
+
+    We report (a) whether the moving piece is pinned along a rank/file/diagonal
+    to our king (a proxy for 'this move likely leaves the king in check') and
+    (b) how many enemy pieces currently attack our king's square. These are
+    heuristic features that a strong representation might encode, not the
+    ground-truth legality oracle.
+    """
+    color = board.turn
+    king = "K" if color == WHITE else "k"
+    try:
+        king_sq = board.squares.index(king)
+    except ValueError:
+        return [0.0, 0.0, 0.0]
+
     piece = board.squares[move.start]
-    if piece == EMPTY or piece_color(piece) != board.turn:
-        return [0.0, 0.0, 1.0]
-    pseudo = {m.uci() for m in pseudo_moves(board)}
-    leaves_king_safe = not is_in_check(board.apply(move), board.turn) if move.uci() in pseudo else False
-    return [
-        1.0 if move.uci() in pseudo else 0.0,
-        1.0 if leaves_king_safe else 0.0,
-        0.0,
-    ]
+    on_king_ray = 0.0
+    if piece != EMPTY and piece_color(piece) == color:
+        kr, kf = rank_of(king_sq), file_of(king_sq)
+        sr, sf = rank_of(move.start), file_of(move.start)
+        if kr == sr or kf == sf or abs(kr - sr) == abs(kf - sf):
+            on_king_ray = 1.0
+
+    attackers_on_king = 0
+    for sq in range(64):
+        p = board.squares[sq]
+        if p != EMPTY and piece_color(p) == other(color):
+            if _single_piece_attacks(board, sq, king_sq):
+                attackers_on_king += 1
+
+    return [on_king_ray, attackers_on_king / 4.0, 1.0 if board.turn == WHITE else 0.0]
 
 
-FEATURE_BLOCKS = [
+def _single_piece_attacks(board: Board, source: int, target: int) -> bool:
+    piece = board.squares[source]
+    if piece == EMPTY:
+        return False
+    kind = piece.upper()
+    sr, sf = rank_of(source), file_of(source)
+    tr, tf = rank_of(target), file_of(target)
+    dr, df = tr - sr, tf - sf
+    if kind == "P":
+        direction = -1 if is_white(piece) else 1
+        return dr == direction and abs(df) == 1
+    if kind == "N":
+        return (abs(dr), abs(df)) in {(1, 2), (2, 1)}
+    if kind == "K":
+        return max(abs(dr), abs(df)) == 1
+    if kind in {"B", "R", "Q"}:
+        if kind == "B" and abs(dr) != abs(df):
+            return False
+        if kind == "R" and dr != 0 and df != 0:
+            return False
+        if kind == "Q" and not (dr == 0 or df == 0 or abs(dr) == abs(df)):
+            return False
+        step_r = (dr > 0) - (dr < 0)
+        step_f = (df > 0) - (df < 0)
+        r, f = sr + step_r, sf + step_f
+        while (r, f) != (tr, tf):
+            sq = to_square(r, f)
+            if sq is None or board.squares[sq] != EMPTY:
+                return False
+            r += step_r
+            f += step_f
+        return True
+    return False
+
+
+FEATURE_BLOCKS: list[tuple[str, Callable[[Board, Move], list[float]]]] = [
     ("material", material_features),
-    ("board_state", board_features),
     ("candidate_move", candidate_features),
-    ("tactical_legality", tactical_features),
+    ("piece_context", piece_context_features),
+    ("king_safety", king_safety_features),
 ]
 
 
-def features_for(example: Example, depth: int) -> list[float]:
+def features_cumulative(example: Example, depth: int) -> list[float]:
     features: list[float] = []
     for _, featurizer in FEATURE_BLOCKS[:depth]:
         features.extend(featurizer(example.board, example.move))
     return features
+
+
+def features_single(example: Example, index: int) -> list[float]:
+    _, featurizer = FEATURE_BLOCKS[index]
+    return featurizer(example.board, example.move)
 
 
 class LogisticProbe:
@@ -421,46 +524,101 @@ def evaluate(model: LogisticProbe, xs: list[list[float]], ys: list[int]) -> tupl
     return correct / len(ys), loss / len(ys)
 
 
-def run(seed: int, positions: int, max_plies: int, epochs: int) -> list[dict[str, float | str | int]]:
+def majority_baseline(ys: list[int]) -> float:
+    if not ys:
+        return 0.0
+    ones = sum(ys)
+    return max(ones, len(ys) - ones) / len(ys)
+
+
+def kfold_indices(n: int, k: int, rng: random.Random) -> list[list[int]]:
+    order = list(range(n))
+    rng.shuffle(order)
+    folds: list[list[int]] = [[] for _ in range(k)]
+    for i, idx in enumerate(order):
+        folds[i % k].append(idx)
+    return folds
+
+
+def fit_and_score(
+    data: list[Example],
+    featurizer: Callable[[Example], list[float]],
+    folds: list[list[int]],
+    epochs: int,
+    lr: float,
+    l2: float,
+) -> tuple[float, float, int]:
+    xs_all = [featurizer(example) for example in data]
+    ys_all = [example.label for example in data]
+    dim = len(xs_all[0])
+    # High-dim blocks need a smaller per-feature step (SGD gradient norm grows
+    # with sqrt(dim) under standardised features) and stronger regularisation.
+    scaled_lr = lr / math.sqrt(max(dim, 1))
+    scaled_l2 = l2 * max(1.0, dim / 16.0)
+    accs: list[float] = []
+    for i, test_idx in enumerate(folds):
+        train_idx = [j for f, fold in enumerate(folds) if f != i for j in fold]
+        train_x = [xs_all[j] for j in train_idx]
+        train_y = [ys_all[j] for j in train_idx]
+        test_x = [xs_all[j] for j in test_idx]
+        test_y = [ys_all[j] for j in test_idx]
+
+        means = [sum(col) / len(train_x) for col in zip(*train_x)]
+        stds = [
+            math.sqrt(sum((row[k] - means[k]) ** 2 for row in train_x) / len(train_x)) or 1.0
+            for k in range(dim)
+        ]
+        train_x = [[(row[k] - means[k]) / stds[k] for k in range(dim)] for row in train_x]
+        test_x = [[(row[k] - means[k]) / stds[k] for k in range(dim)] for row in test_x]
+
+        probe = LogisticProbe(dim)
+        probe.fit(train_x, train_y, epochs=epochs, lr=scaled_lr, l2=scaled_l2)
+        acc, _ = evaluate(probe, test_x, test_y)
+        accs.append(acc)
+    mean = sum(accs) / len(accs)
+    var = sum((a - mean) ** 2 for a in accs) / max(len(accs) - 1, 1)
+    return mean, math.sqrt(var), dim
+
+
+def run(seed: int, positions: int, max_plies: int, epochs: int, folds_k: int) -> None:
     data = make_dataset(seed, positions, max_plies)
-    split = int(0.8 * len(data))
-    train, test = data[:split], data[split:]
-    rows: list[dict[str, float | str | int]] = []
+    fold_rng = random.Random(seed + 1)
+    folds = kfold_indices(len(data), folds_k, fold_rng)
+    baseline = majority_baseline([e.label for e in data])
 
+    print(f"Dataset: {len(data)} examples ({sum(e.label for e in data)} legal, "
+          f"{len(data) - sum(e.label for e in data)} illegal).")
+    print(f"Majority-class baseline: {baseline:.3f}")
+    print()
+
+    print("Cumulative feature ladder (features up to and including depth)")
+    print("depth  block              features  test_acc  ± std")
+    print("-" * 56)
     for depth, (name, _) in enumerate(FEATURE_BLOCKS, start=1):
-        train_x = [features_for(example, depth) for example in train]
-        train_y = [example.label for example in train]
-        test_x = [features_for(example, depth) for example in test]
-        test_y = [example.label for example in test]
-        probe = LogisticProbe(len(train_x[0]))
-        probe.fit(train_x, train_y, epochs=epochs, lr=0.06, l2=0.0005)
-        train_acc, train_loss = evaluate(probe, train_x, train_y)
-        test_acc, test_loss = evaluate(probe, test_x, test_y)
-        rows.append(
-            {
-                "block": name,
-                "features": len(train_x[0]),
-                "train_accuracy": train_acc,
-                "test_accuracy": test_acc,
-                "test_loss": test_loss,
-                "train_loss": train_loss,
-            }
+        mean, std, dim = fit_and_score(
+            data,
+            lambda ex, d=depth: features_cumulative(ex, d),
+            folds,
+            epochs=epochs,
+            lr=0.02,
+            l2=0.001,
         )
-    return rows
+        print(f"{depth:>5}  {name:<18}{dim:>8}  {mean:.3f}     ±{std:.3f}")
 
-
-def print_results(rows: list[dict[str, float | str | int]]) -> None:
-    print("Legality probe results")
-    print("block              features  train_acc  test_acc  test_loss")
-    print("-" * 62)
-    for row in rows:
-        print(
-            f"{row['block']:<18}"
-            f"{row['features']:>8}  "
-            f"{row['train_accuracy']:.3f}      "
-            f"{row['test_accuracy']:.3f}     "
-            f"{row['test_loss']:.3f}"
+    print()
+    print("Individual block contribution (that block's features only)")
+    print("block              features  test_acc  ± std")
+    print("-" * 49)
+    for idx, (name, _) in enumerate(FEATURE_BLOCKS):
+        mean, std, dim = fit_and_score(
+            data,
+            lambda ex, i=idx: features_single(ex, i),
+            folds,
+            epochs=epochs,
+            lr=0.02,
+            l2=0.001,
         )
+        print(f"{name:<18}{dim:>8}  {mean:.3f}     ±{std:.3f}")
 
 
 def main() -> None:
@@ -468,11 +626,11 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--positions", type=int, default=450)
     parser.add_argument("--max-plies", type=int, default=50)
-    parser.add_argument("--epochs", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--folds", type=int, default=5)
     args = parser.parse_args()
 
-    rows = run(args.seed, args.positions, args.max_plies, args.epochs)
-    print_results(rows)
+    run(args.seed, args.positions, args.max_plies, args.epochs, args.folds)
 
 
 if __name__ == "__main__":
