@@ -1,0 +1,26 @@
+project:
+  name: chess-legality-probe
+  stage: probe
+
+paths:
+  dataset: data/stockfish16_t1p3_n4000.pt
+  results_dir: outputs/
+
+probe:
+  epochs: 200
+  lr: 0.01
+  weight_decay: 0.01
+  folds: 5
+  seed: 7
+  no_pos_weight: false
+
+experiment:
+  name: baseline_probe
+  description: >
+    Default probe configuration for repeated experiments on a fixed generated
+    dataset.
+
+notes:
+  purpose: >
+    Probe-training settings intended to be copied and edited frequently while
+    keeping dataset-generation settings unchanged.

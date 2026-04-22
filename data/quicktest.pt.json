@@ -1,0 +1,23 @@
+{
+  "n_examples": 80,
+  "n_legal": 79,
+  "n_illegal": 1,
+  "n_games": 2,
+  "n_layers": 16,
+  "d_model": 512,
+  "config": {
+    "checkpoint": "stockfish_16layers_ckpt_no_optimizer.pt",
+    "repo": "/Users/lucaburns/Work/Classes/LLMs/chess_gpt_eval",
+    "device": "cpu",
+    "positions": 80,
+    "max_plies": 50,
+    "temperature": 1.7,
+    "top_k": 100,
+    "max_new_tokens": 10,
+    "random_opening_plies": 2,
+    "stop_on_illegal": false,
+    "seed": 7,
+    "tokenizer_kind": "char",
+    "n_layers": 16
+  }
+}
