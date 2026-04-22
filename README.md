@@ -1,28 +1,46 @@
 # Chess Legality Probe
 
-We ask whether a chess-playing language model internally represents a
-legality signal before it emits an illegal move. This version keeps the experimental
-shape in two stages:
+## Overview
 
-1. `chess_probe.py`: dependency-free scaffold with proxy chess features.
-2. `chess_gpt_probe.py`: Chess-GPT version for Adam Karvonen's `chess_gpt_eval`
-   NanoGPT checkpoints.
+This project studies whether Chess-GPT internally represents move legality
+before it emits an illegal move.
 
-## Chess-GPT Version
+The workflow is intentionally split into two stages:
 
-We do the following:
+1. Generate a reusable dataset of Chess-GPT activations and legality labels.
+2. Train linear probes on that fixed dataset, often many times, with different
+   probe settings.
 
-1. Load a local `chess_gpt_eval` checkout.
-2. Load a NanoGPT chess checkpoint from `chess_gpt_eval/nanogpt/out/`.
-3. Generate random reachable chess positions.
-4. Format prompts the same compact PGN way as `nanogpt/nanogpt_module.py`.
-5. Capture each transformer block's residual stream at the final prompt token,
-   immediately before move generation.
-6. Generate Chess-GPT's next move and label it legal or illegal with
-   `python-chess`.
-7. Train one linear probe per layer and report layer-wise accuracy.
+The repository keeps those stages separate so you can regenerate data only when
+needed and iterate on probe experiments quickly.
 
-Setup:
+## Project Layout
+
+- `generate_games.py`
+  Generates datasets by running Chess-GPT self-play and caching activations.
+
+- `chess_gpt_probe.py`
+  Loads a saved dataset and trains one probe per layer.
+
+- `chess_probe_common.py`
+  Shared dataset schema and save/load helpers.
+
+- `configs/generation.yaml`
+  Editable defaults for dataset generation.
+
+- `configs/probe.yaml`
+  Editable defaults for probe experiments.
+
+- `data/`
+  Recommended location for generated datasets.
+
+- `outputs/`
+  Recommended location for experiment outputs or saved summaries.
+
+## Setup
+
+Clone the companion Chess-GPT repository next to this project and install the
+Python dependencies:
 
 ```bash
 git clone https://github.com/adamkarvonen/chess_gpt_eval.git ../chess_gpt_eval
@@ -36,73 +54,124 @@ place it in:
 ../chess_gpt_eval/nanogpt/out/
 ```
 
-The original repo README recommends `stockfish_16layers_ckpt_no_optimizer.pt` as
-the strongest model.
+The commonly used checkpoint is:
 
-Run:
+```text
+stockfish_16layers_ckpt_no_optimizer.pt
+```
+
+## Config System
+
+This repo uses YAML config files for organization:
+
+- `configs/generation.yaml`
+  Stores settings related to dataset generation such as checkpoint, sampling
+  settings, and output dataset path.
+
+- `configs/probe.yaml`
+  Stores settings related to probe experiments such as dataset path, optimizer
+  settings, fold count, and experiment naming.
+
+The current Python entry points still accept command-line arguments directly.
+The YAML files are meant to be the editable source of truth you update between
+runs, then translate into the corresponding CLI arguments when launching an
+experiment.
+
+This keeps generation settings stable while making probe settings easy to copy
+and modify repeatedly.
+
+## Generate Data
+
+Start by editing `configs/generation.yaml` with the dataset settings you want.
+
+The default structure includes:
+
+- `paths.chess_gpt_eval_repo`
+- `paths.checkpoint`
+- `paths.output_dataset`
+- `generation.device`
+- `generation.positions`
+- `generation.max_plies`
+- `generation.temperature`
+- `generation.top_k`
+- `generation.max_new_tokens`
+- `generation.random_opening_plies`
+- `generation.stop_on_illegal`
+- `generation.seed`
+
+Then run dataset generation using the values from that config:
 
 ```bash
-uv run python chess_gpt_probe.py \
+uv run python generate_games.py \
   --repo ../chess_gpt_eval \
   --checkpoint stockfish_16layers_ckpt_no_optimizer.pt \
-  --positions 64 \
-  --device cpu
+  --output data/stockfish16_t1p3_n4000.pt \
+  --device auto \
+  --positions 4000 \
+  --max-plies 120 \
+  --temperature 1.3 \
+  --top-k 200 \
+  --max-new-tokens 10 \
+  --random-opening-plies 2 \
+  --seed 7
 ```
 
-Check the local setup without running the probe:
+If you want a different dataset, edit `configs/generation.yaml` and rerun the
+command with the new values.
+
+## Run Probe Experiments
+
+Once you have a dataset, edit `configs/probe.yaml` for the probe settings you
+want to test.
+
+The default structure includes:
+
+- `paths.dataset`
+- `paths.results_dir`
+- `probe.epochs`
+- `probe.lr`
+- `probe.weight_decay`
+- `probe.folds`
+- `probe.seed`
+- `probe.no_pos_weight`
+- `experiment.name`
+
+Run the probe script using the values from that config:
 
 ```bash
 uv run python chess_gpt_probe.py \
-  --check-setup \
-  --repo ../chess_gpt_eval \
-  --checkpoint stockfish_16layers_ckpt_no_optimizer.pt
+  --dataset data/stockfish16_t1p3_n4000.pt \
+  --epochs 200 \
+  --lr 0.01 \
+  --weight-decay 0.01 \
+  --folds 5 \
+  --seed 7
 ```
 
-Use a higher temperature or more positions if the generated labels are too
-imbalanced:
+Because dataset generation is usually the expensive step, the intended pattern
+is to keep `configs/generation.yaml` fixed for a while and make many edits or
+copies of `configs/probe.yaml`.
 
-```bash
-uv run python chess_gpt_probe.py --temperature 1.2 --positions 256
+## Creating New Experiment Configs
+
+To create a new probe experiment on the same dataset, copy `configs/probe.yaml`
+to a new file and change only the settings you care about.
+
+Example:
+
+```text
+configs/probe_layer8.yaml
 ```
 
-## Dependency-Free Scaffold
+You might change:
 
-`chess_probe.py` remains useful when you do not have Torch or the checkpoint
-installed. It uses handcrafted board features as layer-like proxies:
+- `experiment.name`
+- `probe.epochs`
+- `probe.lr`
+- `probe.weight_decay`
+- `probe.folds`
+- `probe.seed`
+- `paths.dataset`
 
-The feature blocks are:
-
-- `material`: only a crude material summary.
-- `board_state`: one-hot board representation.
-- `candidate_move`: board state plus the proposed move.
-- `tactical_legality`: pseudo-legal and king-safety signals.
-
-This is not yet mechanistic interpretability on Chess-GPT activations. It is the
-minimum runnable scaffold for the project: data generation, legal/illegal labels,
-linear probe training, and layer-wise reporting.
-
-Run the scaffold:
-
-```bash
-uv run python chess_probe.py
-```
-
-For a faster run:
-
-```bash
-uv run python chess_probe.py --positions 120 --epochs 4
-```
-
-Run the smoke tests:
-
-```bash
-uv run python test.py
-```
-
-## Next Steps
-
-- Stratify illegal examples by failure type: empty source square, own-piece
-  capture, piece movement violation, and moving into check.
-- Compare probe generalization across positions, pieces, and illegal-move types.
-- Add intervention tests by shifting activations along the learned legality
-  direction before decoding.
+This makes it easy to keep a record of multiple probe runs without touching the
+dataset-generation config.
