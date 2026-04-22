@@ -21,6 +21,9 @@
 - `Initial_Project_Proposal.pdf`
   Proposal and project background.
 
+- `4-22-Update.md`
+  Project description and update for 4-22 submission
+
 ## Directories
 
 - `configs/`
