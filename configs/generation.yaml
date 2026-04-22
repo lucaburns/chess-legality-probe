@@ -15,7 +15,7 @@ generation:
   top_k: 200
   max_new_tokens: 10
   random_opening_plies: 2
-  stop_on_illegal: false
+  stop_on_illegal: true
   seed: 7
 
 notes:
