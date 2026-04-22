@@ -72,10 +72,12 @@ This repo uses YAML config files for organization:
   Stores settings related to probe experiments such as dataset path, optimizer
   settings, fold count, and experiment naming.
 
-The current Python entry points still accept command-line arguments directly.
-The YAML files are meant to be the editable source of truth you update between
-runs, then translate into the corresponding CLI arguments when launching an
-experiment.
+The Python entry points support both workflows:
+
+- direct CLI arguments
+- `--config` with values loaded from YAML
+
+If you provide both, explicit CLI arguments override the YAML values.
 
 This keeps generation settings stable while making probe settings easy to copy
 and modify repeatedly.
@@ -99,7 +101,22 @@ The default structure includes:
 - `generation.stop_on_illegal`
 - `generation.seed`
 
-Then run dataset generation using the values from that config:
+Then run dataset generation using either the config file directly:
+
+```bash
+uv run python generate_games.py --config configs/generation.yaml
+```
+
+Or override individual config values from the command line:
+
+```bash
+uv run python generate_games.py \
+  --config configs/generation.yaml \
+  --positions 80 \
+  --output data/quicktest.pt
+```
+
+The equivalent fully explicit CLI form is:
 
 ```bash
 uv run python generate_games.py \
@@ -136,7 +153,22 @@ The default structure includes:
 - `probe.no_pos_weight`
 - `experiment.name`
 
-Run the probe script using the values from that config:
+Run the probe script using the config file directly:
+
+```bash
+uv run python chess_gpt_probe.py --config configs/probe.yaml
+```
+
+Or override individual config values from the command line:
+
+```bash
+uv run python chess_gpt_probe.py \
+  --config configs/probe.yaml \
+  --epochs 50 \
+  --folds 3
+```
+
+The equivalent fully explicit CLI form is:
 
 ```bash
 uv run python chess_gpt_probe.py \

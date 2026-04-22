@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Callable
 
 from chess_probe_common import Example, save_examples
+from config_utils import flatten_sections, load_yaml_config
 
 torch = None
 chess = None
@@ -416,26 +417,83 @@ def run(args) -> None:
     print(f"Summary sidecar at {output_path}.json")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate self-play games and save activations.")
-    parser.add_argument("--repo", default=os.environ.get("CHESS_GPT_EVAL_REPO", "../chess_gpt_eval"))
-    parser.add_argument("--checkpoint", default="stockfish_16layers_ckpt_no_optimizer.pt")
-    parser.add_argument("--device", default="auto", help="'auto', 'cpu', 'cuda', or a torch device string.")
-    parser.add_argument("--output", required=True,
+def parse_args() -> argparse.Namespace:
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument("--config", help="Path to a YAML config file.")
+    config_args, remaining = config_parser.parse_known_args()
+
+    defaults = {
+        "repo": os.environ.get("CHESS_GPT_EVAL_REPO", "../chess_gpt_eval"),
+        "checkpoint": "stockfish_16layers_ckpt_no_optimizer.pt",
+        "device": "auto",
+        "output": None,
+        "positions": 4000,
+        "max_plies": 120,
+        "temperature": 1.3,
+        "top_k": 200,
+        "max_new_tokens": 10,
+        "random_opening_plies": 2,
+        "stop_on_illegal": False,
+        "seed": 7,
+    }
+
+    if config_args.config:
+        config = load_yaml_config(config_args.config)
+        yaml_values = flatten_sections(config, "paths", "generation")
+        defaults.update(
+            {
+                "repo": yaml_values.get("chess_gpt_eval_repo", defaults["repo"]),
+                "checkpoint": yaml_values.get("checkpoint", defaults["checkpoint"]),
+                "device": yaml_values.get("device", defaults["device"]),
+                "output": yaml_values.get("output_dataset", defaults["output"]),
+                "positions": yaml_values.get("positions", defaults["positions"]),
+                "max_plies": yaml_values.get("max_plies", defaults["max_plies"]),
+                "temperature": yaml_values.get("temperature", defaults["temperature"]),
+                "top_k": yaml_values.get("top_k", defaults["top_k"]),
+                "max_new_tokens": yaml_values.get("max_new_tokens", defaults["max_new_tokens"]),
+                "random_opening_plies": yaml_values.get(
+                    "random_opening_plies", defaults["random_opening_plies"]
+                ),
+                "stop_on_illegal": yaml_values.get(
+                    "stop_on_illegal", defaults["stop_on_illegal"]
+                ),
+                "seed": yaml_values.get("seed", defaults["seed"]),
+            }
+        )
+
+    parser = argparse.ArgumentParser(
+        description="Generate self-play games and save activations.",
+        parents=[config_parser],
+    )
+    parser.set_defaults(**defaults)
+    parser.add_argument("--repo")
+    parser.add_argument("--checkpoint")
+    parser.add_argument("--device", help="'auto', 'cpu', 'cuda', or a torch device string.")
+    parser.add_argument("--output",
                         help="Path to save the dataset (.pt). A .pt.json summary is also written.")
-    parser.add_argument("--positions", type=int, default=4000,
+    parser.add_argument("--positions", type=int,
                         help="Target number of examples to collect.")
-    parser.add_argument("--max-plies", type=int, default=120,
+    parser.add_argument("--max-plies", type=int,
                         help="Maximum ply count per self-play game.")
-    parser.add_argument("--temperature", type=float, default=1.3)
-    parser.add_argument("--top-k", type=int, default=200)
-    parser.add_argument("--max-new-tokens", type=int, default=10)
-    parser.add_argument("--random-opening-plies", type=int, default=2,
+    parser.add_argument("--temperature", type=float)
+    parser.add_argument("--top-k", type=int)
+    parser.add_argument("--max-new-tokens", type=int)
+    parser.add_argument("--random-opening-plies", type=int,
                         help="Max random legal plies to play before the model takes over.")
-    parser.add_argument("--stop-on-illegal", action="store_true",
-                        help="End games on illegal move instead of patching with a random legal move.")
-    parser.add_argument("--seed", type=int, default=7)
-    run(parser.parse_args())
+    stop_group = parser.add_mutually_exclusive_group()
+    stop_group.add_argument("--stop-on-illegal", dest="stop_on_illegal", action="store_true",
+                            help="End games on illegal move instead of patching with a random legal move.")
+    stop_group.add_argument("--no-stop-on-illegal", dest="stop_on_illegal", action="store_false",
+                            help=argparse.SUPPRESS)
+    parser.add_argument("--seed", type=int)
+    args = parser.parse_args(remaining)
+    if args.output is None:
+        parser.error("--output is required unless provided via --config.")
+    return args
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":
