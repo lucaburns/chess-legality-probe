@@ -8,15 +8,15 @@ paths:
   output_dataset: data/stockfish16_t1p3_n4000.pt
 
 generation:
-  device: auto
-  positions: 4000
-  max_plies: 120
+  device: cuda
+  positions: 30000
+  max_plies: 160
   temperature: 1.3
   top_k: 200
   max_new_tokens: 10
   random_opening_plies: 2
   stop_on_illegal: true
-  seed: 7
+  seed: 1
 
 notes:
   purpose: >

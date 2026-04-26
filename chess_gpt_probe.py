@@ -7,11 +7,13 @@ probe training is O(seconds).
 
 Usage:
     python chess_gpt_probe.py --dataset datasets/stockfish16_t1.3_n4000.pt
+    python chess_gpt_probe.py --dataset ... --per-fold-csv per_fold.csv
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import random
 from pathlib import Path
@@ -19,7 +21,6 @@ from pathlib import Path
 import torch
 
 from chess_probe_common import load_examples
-from config_utils import flatten_sections, load_yaml_config
 
 
 # ---------------------------------------------------------------------------
@@ -82,13 +83,7 @@ def train_probe(
     pos_weight: torch.Tensor | None = None,
 ) -> tuple[float, float, float, float]:
     """Full-batch AdamW on a linear probe. Returns
-    (train_acc, test_acc, test_loss, test_auroc).
-
-    train_y/test_y should use 1 for the class of interest (illegal moves
-    in our setup). pos_weight scales the loss contribution of label=1
-    examples and is typically set to n_negative/n_positive in the train
-    fold to rebalance a heavily skewed dataset.
-    """
+    (train_acc, test_acc, test_loss, test_auroc)."""
     dim = train_x.shape[1]
     probe = torch.nn.Linear(dim, 1)
     optimizer = torch.optim.AdamW(probe.parameters(), lr=lr, weight_decay=weight_decay)
@@ -100,8 +95,6 @@ def train_probe(
         loss.backward()
         optimizer.step()
 
-    # Eval loss reported without pos_weight so numbers are comparable
-    # across runs with different class ratios.
     eval_loss_fn = torch.nn.BCEWithLogitsLoss()
     with torch.no_grad():
         train_logits = probe(train_x).squeeze(-1)
@@ -128,19 +121,16 @@ def kfold_indices(n: int, k: int, rng: random.Random) -> list[list[int]]:
 
 
 def probe_layer(
-    activations: torch.Tensor,  # (n_examples, n_layers+1, d_model)
-    is_legal: torch.Tensor,     # (n_examples,) int, 1 = legal
+    activations: torch.Tensor,
+    is_legal: torch.Tensor,
     layer: int,
     folds: list[list[int]],
     epochs: int,
     lr: float,
     weight_decay: float,
     use_pos_weight: bool = True,
-) -> dict[str, float]:
+) -> dict:
     x_all = activations[:, layer, :].float()
-    # Flip to is_illegal so the minority class is label=1. AUC is
-    # invariant to flipping, but this makes pos_weight upweight the
-    # minority class naturally.
     y_all = (1 - is_legal.float())
 
     accs: list[float] = []
@@ -191,6 +181,11 @@ def probe_layer(
         "test_auc_std": auc_std,
         "test_loss": loss_mean,
         "dim": x_all.shape[1],
+        # Per-fold raw values for distribution plotting
+        "fold_train_accs": train_accs,
+        "fold_test_accs": accs,
+        "fold_test_aucs": aucs,
+        "fold_test_losses": losses,
     }
 
 
@@ -243,6 +238,7 @@ def run(args) -> None:
     print()
     print("layer  dim    train_acc  test_acc ± std  test_auc ± std  test_loss")
     print("-" * 68)
+    per_fold_rows = []
     for slot in range(n_slots):
         stats = probe_layer(
             activations, is_legal, slot, folds,
@@ -258,62 +254,44 @@ def run(args) -> None:
             f"{stats['test_loss']:.3f}"
         )
 
+        for fold_idx in range(len(folds)):
+            per_fold_rows.append({
+                "layer": label,
+                "layer_idx": slot,
+                "fold": fold_idx,
+                "train_acc": stats["fold_train_accs"][fold_idx],
+                "test_acc": stats["fold_test_accs"][fold_idx],
+                "test_auc": stats["fold_test_aucs"][fold_idx],
+                "test_loss": stats["fold_test_losses"][fold_idx],
+            })
 
-def parse_args() -> argparse.Namespace:
-    config_parser = argparse.ArgumentParser(add_help=False)
-    config_parser.add_argument("--config", help="Path to a YAML config file.")
-    config_args, remaining = config_parser.parse_known_args()
-
-    defaults = {
-        "dataset": None,
-        "epochs": 200,
-        "lr": 1e-2,
-        "weight_decay": 1e-2,
-        "no_pos_weight": False,
-        "folds": 5,
-        "seed": 7,
-    }
-
-    if config_args.config:
-        config = load_yaml_config(config_args.config)
-        yaml_values = flatten_sections(config, "paths", "probe")
-        defaults.update(
-            {
-                "dataset": yaml_values.get("dataset", defaults["dataset"]),
-                "epochs": yaml_values.get("epochs", defaults["epochs"]),
-                "lr": yaml_values.get("lr", defaults["lr"]),
-                "weight_decay": yaml_values.get("weight_decay", defaults["weight_decay"]),
-                "no_pos_weight": yaml_values.get("no_pos_weight", defaults["no_pos_weight"]),
-                "folds": yaml_values.get("folds", defaults["folds"]),
-                "seed": yaml_values.get("seed", defaults["seed"]),
-            }
-        )
-
-    parser = argparse.ArgumentParser(
-        description="Train legality probes on a saved dataset.",
-        parents=[config_parser],
-    )
-    parser.set_defaults(**defaults)
-    parser.add_argument("--dataset",
-                        help="Path to a dataset saved by generate_games.py.")
-    parser.add_argument("--epochs", type=int)
-    parser.add_argument("--lr", type=float)
-    parser.add_argument("--weight-decay", type=float)
-    pos_group = parser.add_mutually_exclusive_group()
-    pos_group.add_argument("--no-pos-weight", dest="no_pos_weight", action="store_true",
-                           help="Disable class-imbalance reweighting in the probe loss.")
-    pos_group.add_argument("--pos-weight", dest="no_pos_weight", action="store_false",
-                           help=argparse.SUPPRESS)
-    parser.add_argument("--folds", type=int)
-    parser.add_argument("--seed", type=int)
-    args = parser.parse_args(remaining)
-    if args.dataset is None:
-        parser.error("--dataset is required unless provided via --config.")
-    return args
+    if args.per_fold_csv:
+        out_path = Path(args.per_fold_csv).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "layer", "layer_idx", "fold",
+                "train_acc", "test_acc", "test_auc", "test_loss",
+            ])
+            writer.writeheader()
+            writer.writerows(per_fold_rows)
+        print(f"\nSaved per-fold metrics to {out_path}")
 
 
 def main() -> None:
-    run(parse_args())
+    parser = argparse.ArgumentParser(description="Train legality probes on a saved dataset.")
+    parser.add_argument("--dataset", required=True,
+                        help="Path to a dataset saved by generate_games.py.")
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--lr", type=float, default=1e-2)
+    parser.add_argument("--weight-decay", type=float, default=1e-2)
+    parser.add_argument("--no-pos-weight", action="store_true",
+                        help="Disable class-imbalance reweighting in the probe loss.")
+    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--per-fold-csv", default=None,
+                        help="Optional path to write one CSV row per (layer, fold).")
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":
