@@ -1,0 +1,23 @@
+# Config for generate_games_with_neurons.py
+# Mirrors configs/generation.yaml but with capture_mlp: true.
+
+model:
+  checkpoint: stockfish_16layers_ckpt_no_optimizer.pt
+
+generation:
+  device: cuda
+  positions: 30000
+  max_plies: 160
+  temperature: 1.3
+  top_k: 200
+  max_new_tokens: 10
+  random_opening_plies: 2
+  stop_on_illegal: true
+  seed: 1
+
+capture:
+  capture_residual: true
+  capture_mlp: true   # post-GELU activations from each transformer block
+
+output:
+  path: data/stockfish16_t1p3_n30000_neurons.pt

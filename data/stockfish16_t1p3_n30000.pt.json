@@ -1,0 +1,23 @@
+{
+  "n_examples": 30000,
+  "n_legal": 29758,
+  "n_illegal": 242,
+  "n_games": 410,
+  "n_layers": 16,
+  "d_model": 512,
+  "config": {
+    "checkpoint": "stockfish_16layers_ckpt_no_optimizer.pt",
+    "repo": "C:\\Users\\monke\\chess_gpt_eval",
+    "device": "cuda",
+    "positions": 30000,
+    "max_plies": 160,
+    "temperature": 1.3,
+    "top_k": 200,
+    "max_new_tokens": 10,
+    "random_opening_plies": 2,
+    "stop_on_illegal": true,
+    "seed": 1,
+    "tokenizer_kind": "char",
+    "n_layers": 16
+  }
+}
