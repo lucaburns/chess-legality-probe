@@ -21,6 +21,7 @@ from pathlib import Path
 import torch
 
 from chess_probe_common import load_examples
+from config_utils import flatten_sections, load_yaml_config
 
 
 # ---------------------------------------------------------------------------
@@ -278,20 +279,63 @@ def run(args) -> None:
         print(f"\nSaved per-fold metrics to {out_path}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train legality probes on a saved dataset.")
-    parser.add_argument("--dataset", required=True,
+def parse_args() -> argparse.Namespace:
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument("--config", help="Path to a YAML config file.")
+    config_args, remaining = config_parser.parse_known_args()
+
+    defaults = {
+        "dataset": None,
+        "epochs": 200,
+        "lr": 1e-2,
+        "weight_decay": 1e-2,
+        "no_pos_weight": False,
+        "folds": 5,
+        "seed": 7,
+        "per_fold_csv": None,
+    }
+
+    if config_args.config:
+        config = load_yaml_config(config_args.config)
+        yaml_values = flatten_sections(config, "paths", "probe")
+        defaults.update(
+            {
+                "dataset": yaml_values.get("dataset", defaults["dataset"]),
+                "epochs": yaml_values.get("epochs", defaults["epochs"]),
+                "lr": yaml_values.get("lr", defaults["lr"]),
+                "weight_decay": yaml_values.get("weight_decay", defaults["weight_decay"]),
+                "no_pos_weight": yaml_values.get(
+                    "no_pos_weight", defaults["no_pos_weight"]
+                ),
+                "folds": yaml_values.get("folds", defaults["folds"]),
+                "seed": yaml_values.get("seed", defaults["seed"]),
+            }
+        )
+
+    parser = argparse.ArgumentParser(
+        description="Train legality probes on a saved dataset.",
+        parents=[config_parser],
+    )
+    parser.add_argument("--dataset",
                         help="Path to a dataset saved by generate_games.py.")
-    parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--lr", type=float, default=1e-2)
-    parser.add_argument("--weight-decay", type=float, default=1e-2)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--lr", type=float)
+    parser.add_argument("--weight-decay", type=float)
     parser.add_argument("--no-pos-weight", action="store_true",
                         help="Disable class-imbalance reweighting in the probe loss.")
-    parser.add_argument("--folds", type=int, default=5)
-    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--folds", type=int)
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--per-fold-csv", default=None,
                         help="Optional path to write one CSV row per (layer, fold).")
-    run(parser.parse_args())
+    parser.set_defaults(**defaults)
+    args = parser.parse_args(remaining)
+    if args.dataset is None:
+        parser.error("--dataset is required unless provided via --config.")
+    return args
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":

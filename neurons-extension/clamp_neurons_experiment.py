@@ -34,16 +34,54 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-import torch
-
 from _paths import setup_paths, resolve_path
 setup_paths()
 
-from chess_probe_common_neurons import load_neuron_examples
-from generate_games import (
-    ChessGPT, load_runtime_dependencies, random_opening, parse_san_or_none,
-)
-from generate_games_with_neurons import NeuronCaptureChessGPT, find_gelu
+torch = None
+load_neuron_examples = None
+ChessGPT = None
+load_runtime_dependencies = None
+random_opening = None
+parse_san_or_none = None
+NeuronCaptureChessGPT = None
+find_gelu = None
+
+
+def load_runtime_imports() -> None:
+    global torch, load_neuron_examples, ChessGPT, load_runtime_dependencies
+    global random_opening, parse_san_or_none, NeuronCaptureChessGPT, find_gelu
+    if torch is None:
+        import torch as _torch
+        from chess_probe_common_neurons import load_neuron_examples as _load_neuron_examples
+        from generate_games import (
+            ChessGPT as _ChessGPT,
+            load_runtime_dependencies as _load_runtime_dependencies,
+            random_opening as _random_opening,
+            parse_san_or_none as _parse_san_or_none,
+        )
+        from generate_games_with_neurons import (
+            NeuronCaptureChessGPT as _NeuronCaptureChessGPT,
+            find_gelu as _find_gelu,
+        )
+
+        torch = _torch
+        load_neuron_examples = _load_neuron_examples
+        ChessGPT = _ChessGPT
+        load_runtime_dependencies = _load_runtime_dependencies
+        random_opening = _random_opening
+        parse_san_or_none = _parse_san_or_none
+        NeuronCaptureChessGPT = _NeuronCaptureChessGPT
+        find_gelu = _find_gelu
+
+
+def resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +249,7 @@ def eval_config(chess_gpt, gelus, clamp_spec, coeff, gen_cfg,
 # ---------------------------------------------------------------------------
 
 
-def main():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", required=True,
                    help="Existing neurons dataset (used to read config only).")
@@ -225,9 +263,16 @@ def main():
                    default=[5, 20, 50, 100])
     p.add_argument("--coeff-sweep", nargs="+", type=float,
                    default=[0.0, 0.5, 1.0, 2.0, 4.0])
+    p.add_argument("--device", default="auto",
+                   help="'auto', 'cpu', 'cuda', 'mps', or a torch device string.")
     p.add_argument("--seed", type=int, default=1234,
                    help="Different from training seed to avoid repeated games.")
-    args = p.parse_args()
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
+    load_runtime_imports()
 
     load_runtime_dependencies()
 
@@ -246,7 +291,7 @@ def main():
         "checkpoint", "stockfish_16layers_ckpt_no_optimizer.pt"
     )
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = resolve_device(args.device)
     base = ChessGPT(Path(args.repo).expanduser().resolve(),
                     checkpoint_name, device)
     chess_gpt = NeuronCaptureChessGPT(base)

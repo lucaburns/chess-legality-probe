@@ -20,17 +20,54 @@ import random
 import time
 from pathlib import Path
 
-import torch
-import yaml
-
 from _paths import setup_paths, resolve_path
 setup_paths()
 
-# Import the working pipeline from the project root.
-from chess_probe_common_neurons import NeuronExample, save_neuron_examples
-from generate_games import (
-    ChessGPT, load_runtime_dependencies, random_opening, parse_san_or_none,
-)
+torch = None
+yaml = None
+NeuronExample = None
+save_neuron_examples = None
+ChessGPT = None
+load_runtime_dependencies = None
+random_opening = None
+parse_san_or_none = None
+
+
+def load_runtime_imports() -> None:
+    global torch, yaml, NeuronExample, save_neuron_examples
+    global ChessGPT, load_runtime_dependencies, random_opening, parse_san_or_none
+    if torch is None:
+        import torch as _torch
+        import yaml as _yaml
+        from chess_probe_common_neurons import (
+            NeuronExample as _NeuronExample,
+            save_neuron_examples as _save_neuron_examples,
+        )
+        from generate_games import (
+            ChessGPT as _ChessGPT,
+            load_runtime_dependencies as _load_runtime_dependencies,
+            random_opening as _random_opening,
+            parse_san_or_none as _parse_san_or_none,
+        )
+
+        torch = _torch
+        yaml = _yaml
+        NeuronExample = _NeuronExample
+        save_neuron_examples = _save_neuron_examples
+        ChessGPT = _ChessGPT
+        load_runtime_dependencies = _load_runtime_dependencies
+        random_opening = _random_opening
+        parse_san_or_none = _parse_san_or_none
+
+
+def resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +284,17 @@ def collect_examples(
 # ---------------------------------------------------------------------------
 
 
-def main():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="YAML config file")
     parser.add_argument("--repo", required=True,
                         help="Path to chess_gpt_eval repo (containing nanogpt/)")
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    load_runtime_imports()
 
     with open(args.config) as f:
         cfg_full = yaml.safe_load(f)
@@ -266,9 +308,7 @@ def main():
 
     load_runtime_dependencies()
 
-    device = gen_cfg["device"]
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = resolve_device(gen_cfg["device"])
 
     base = ChessGPT(
         Path(args.repo).expanduser().resolve(),

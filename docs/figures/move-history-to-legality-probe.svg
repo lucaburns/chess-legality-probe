@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">From move history to legality labels</title>
+  <desc id="desc">The model reads a PGN move history; a rules engine reconstructs the board to label candidate moves as legal or illegal.</desc>
+
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+
+    <marker id="arrow-blue" viewBox="0 0 14 14" markerWidth="16" markerHeight="16" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,3 L12,7 L2,11 Z" fill="#2563eb"/>
+    </marker>
+
+    <marker id="arrow-green" viewBox="0 0 14 14" markerWidth="16" markerHeight="16" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,3 L12,7 L2,11 Z" fill="#16a34a"/>
+    </marker>
+
+    <marker id="arrow-red" viewBox="0 0 14 14" markerWidth="16" markerHeight="16" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,3 L12,7 L2,11 Z" fill="#dc2626"/>
+    </marker>
+
+    <style>
+      .title{font:700 34px Arial, sans-serif; fill:#0f172a}
+      .subtitle{font:400 18px Arial, sans-serif; fill:#475569}
+      .label{font:700 17px Arial, sans-serif; fill:#0f172a}
+      .small{font:400 14px Arial, sans-serif; fill:#475569}
+      .tiny{font:400 12px Arial, sans-serif; fill:#64748b}
+      .mono{font:500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill:#0f172a}
+      .mono-small{font:500 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill:#334155}
+      .piece{font:700 38px Arial, sans-serif; fill:#0f172a}
+      .badge{font:700 14px Arial, sans-serif; fill:#ffffff}
+      .pill{font:700 13px Arial, sans-serif; fill:#334155}
+    </style>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+
+  <text x="60" y="70" class="title">From move history to legality labels</text>
+  <text x="60" y="102" class="subtitle">The model reads a PGN move history; a rules engine reconstructs the board to label candidate moves as legal or illegal.</text>
+
+  <!-- Left card: model-facing input -->
+  <rect x="55" y="145" width="510" height="445" rx="24" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+  <text x="85" y="185" class="label">PGN prompt (model input)</text>
+  <text x="85" y="214" class="small">The model receives move history as text (not a board representation).</text>
+
+  <rect x="85" y="242" width="440" height="176" rx="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="105" y="276" class="mono-small">[prompt sample]</text>
+  <text x="105" y="306" class="mono-small">;1.h3 h5 2.Nf3 Nh6 3.g4 Na6</text>
+  <text x="105" y="330" class="mono-small">4.gxh5 d5 5.Ne5 g6 6.Nf3 Rh7</text>
+  <text x="105" y="354" class="mono-small">...</text>
+  <text x="105" y="378" class="mono-small">57.Bf8 Ke8 58.Bxh6 Ra7 59.Bc1 Bb4+</text>
+
+  <rect x="85" y="450" width="138" height="36" rx="18" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1"/>
+  <text x="154" y="473" class="pill" text-anchor="middle">Tokenized input</text>
+
+  <rect x="240" y="450" width="150" height="36" rx="18" fill="#eef2ff" stroke="#818cf8" stroke-width="1"/>
+  <text x="315" y="473" class="pill" text-anchor="middle">Model activations</text>
+
+  <rect x="85" y="515" width="450" height="44" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1"/>
+  <text x="105" y="543" class="small">Activations are captured before the model generates the next move.</text>
+
+  <!-- Arrow -->
+  <line x1="590" y1="360" x2="665" y2="360" stroke="#2563eb" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+
+  <!-- Right card: reconstructed board and labels -->
+  <rect x="690" y="145" width="455" height="445" rx="24" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+  <text x="720" y="185" class="label">Legality labeling (rules engine)</text>
+  <text x="720" y="214" class="small">A rules engine reconstructs the board from the PGN</text>
+  <text x="720" y="234" class="small">and evaluates candidate moves.</text>
+
+  <!-- Mini board -->
+  <rect x="742" y="245" width="272" height="272" fill="#fff" stroke="#334155" stroke-width="2" rx="8"/>
+  <!-- Board squares, 8x8, 34px -->
+  <g>
+    <rect x="742" y="245" width="34" height="34" fill="#f1f5f9"/><rect x="776" y="245" width="34" height="34" fill="#cbd5e1"/><rect x="810" y="245" width="34" height="34" fill="#f1f5f9"/><rect x="844" y="245" width="34" height="34" fill="#cbd5e1"/><rect x="878" y="245" width="34" height="34" fill="#f1f5f9"/><text x="895" y="275" class="piece" text-anchor="middle">♚</text><rect x="912" y="245" width="34" height="34" fill="#cbd5e1"/><rect x="946" y="245" width="34" height="34" fill="#f1f5f9"/><rect x="980" y="245" width="34" height="34" fill="#cbd5e1"/>
+
+    <rect x="742" y="279" width="34" height="34" fill="#cbd5e1"/><text x="759" y="309" class="piece" text-anchor="middle">♜</text><rect x="776" y="279" width="34" height="34" fill="#f1f5f9"/><rect x="810" y="279" width="34" height="34" fill="#cbd5e1"/><rect x="844" y="279" width="34" height="34" fill="#f1f5f9"/><rect x="878" y="279" width="34" height="34" fill="#cbd5e1"/><rect x="912" y="279" width="34" height="34" fill="#f1f5f9"/><rect x="946" y="279" width="34" height="34" fill="#cbd5e1"/><rect x="980" y="279" width="34" height="34" fill="#f1f5f9"/>
+
+    <rect x="742" y="313" width="34" height="34" fill="#f1f5f9"/><rect x="776" y="313" width="34" height="34" fill="#cbd5e1"/><rect x="810" y="313" width="34" height="34" fill="#f1f5f9"/><rect x="844" y="313" width="34" height="34" fill="#cbd5e1"/><rect x="878" y="313" width="34" height="34" fill="#f1f5f9"/><rect x="912" y="313" width="34" height="34" fill="#cbd5e1"/><rect x="946" y="313" width="34" height="34" fill="#f1f5f9"/><rect x="980" y="313" width="34" height="34" fill="#cbd5e1"/>
+
+    <rect x="742" y="347" width="34" height="34" fill="#cbd5e1"/><rect x="776" y="347" width="34" height="34" fill="#f1f5f9"/><rect x="810" y="347" width="34" height="34" fill="#cbd5e1"/><rect x="844" y="347" width="34" height="34" fill="#f1f5f9"/><rect x="878" y="347" width="34" height="34" fill="#cbd5e1"/><rect x="912" y="347" width="34" height="34" fill="#f1f5f9"/><rect x="946" y="347" width="34" height="34" fill="#cbd5e1"/><rect x="980" y="347" width="34" height="34" fill="#f1f5f9"/>
+
+    <rect x="742" y="381" width="34" height="34" fill="#f1f5f9"/><rect x="776" y="381" width="34" height="34" fill="#cbd5e1"/><rect x="779" y="384" width="28" height="28" rx="8" fill="#fef3c7" opacity="0.75" stroke="#d97706" stroke-width="2"/><text x="793" y="411" class="piece" text-anchor="middle">♝</text><rect x="810" y="381" width="34" height="34" fill="#f1f5f9"/><rect x="844" y="381" width="34" height="34" fill="#cbd5e1"/><rect x="878" y="381" width="34" height="34" fill="#f1f5f9"/><rect x="912" y="381" width="34" height="34" fill="#cbd5e1"/><rect x="946" y="381" width="34" height="34" fill="#f1f5f9"/><rect x="980" y="381" width="34" height="34" fill="#cbd5e1"/>
+
+    <rect x="742" y="415" width="34" height="34" fill="#cbd5e1"/><rect x="776" y="415" width="34" height="34" fill="#f1f5f9"/><rect x="810" y="415" width="34" height="34" fill="#cbd5e1"/><rect x="844" y="415" width="34" height="34" fill="#f1f5f9"/><rect x="878" y="415" width="34" height="34" fill="#cbd5e1"/><rect x="912" y="415" width="34" height="34" fill="#f1f5f9"/><rect x="946" y="415" width="34" height="34" fill="#cbd5e1"/><rect x="980" y="415" width="34" height="34" fill="#f1f5f9"/>
+
+    <rect x="742" y="449" width="34" height="34" fill="#f1f5f9"/><rect x="776" y="449" width="34" height="34" fill="#cbd5e1"/><rect x="810" y="449" width="34" height="34" fill="#f1f5f9"/><rect x="844" y="449" width="34" height="34" fill="#cbd5e1"/><rect x="878" y="449" width="34" height="34" fill="#f1f5f9"/><text x="895" y="479" class="piece" text-anchor="middle">♙</text><rect x="912" y="449" width="34" height="34" fill="#cbd5e1"/><rect x="946" y="449" width="34" height="34" fill="#f1f5f9"/><rect x="980" y="449" width="34" height="34" fill="#cbd5e1"/>
+
+    <rect x="742" y="483" width="34" height="34" fill="#cbd5e1"/><rect x="776" y="483" width="34" height="34" fill="#f1f5f9"/><rect x="810" y="483" width="34" height="34" fill="#cbd5e1"/><text x="827" y="513" class="piece" text-anchor="middle">♗</text><rect x="844" y="483" width="34" height="34" fill="#f1f5f9"/><rect x="878" y="483" width="34" height="34" fill="#cbd5e1"/><rect x="881" y="486" width="28" height="28" rx="8" fill="#fee2e2" opacity="0.7" stroke="#dc2626" stroke-width="2"/><text x="895" y="513" class="piece" text-anchor="middle">♔</text><rect x="912" y="483" width="34" height="34" fill="#f1f5f9"/><rect x="946" y="483" width="34" height="34" fill="#cbd5e1"/><rect x="980" y="483" width="34" height="34" fill="#f1f5f9"/><text x="997" y="513" class="piece" text-anchor="middle">♖</text>
+  </g>
+
+  <!-- check line and candidate moves -->
+  <line x1="793" y1="398" x2="895" y2="500" stroke="#d97706" stroke-width="4" stroke-linecap="round" stroke-dasharray="8 8" opacity="0.9" marker-end="url(#arrow-red)"/>
+  <path d="M827,500 Q846,468 861,466" fill="none" stroke="#16a34a" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow-green)"/>
+  <path d="M895,512 C925,550 945,550 963,512" fill="none" stroke="#dc2626" stroke-width="5" stroke-linecap="round" stroke-dasharray="7 8" marker-end="url(#arrow-red)"/>
+
+  <rect x="1035" y="265" width="80" height="32" rx="16" fill="#16a34a" stroke="#16a34a" stroke-width="1"/>
+  <text x="1075" y="286" class="badge" text-anchor="middle" fill="#fff">LEGAL</text>
+
+  <rect x="1035" y="318" width="80" height="32" rx="16" fill="#dc2626" stroke="#dc2626" stroke-width="1"/>
+  <text x="1075" y="339" class="badge" text-anchor="middle" fill="#fff">ILLEGAL</text>
+
+
+  <text x="720" y="555" class="small">Example: is the model’s generated move legal in this position?</text>
+</svg>
