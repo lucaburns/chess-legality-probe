@@ -8,7 +8,7 @@ paths:
   output_dataset: data/stockfish16_t1p3_n4000.pt
 
 generation:
-  device: cuda
+  device: auto
   positions: 30000
   max_plies: 160
   temperature: 1.3

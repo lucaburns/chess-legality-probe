@@ -5,7 +5,7 @@ model:
   checkpoint: stockfish_16layers_ckpt_no_optimizer.pt
 
 generation:
-  device: cuda
+  device: auto
   positions: 30000
   max_plies: 160
   temperature: 1.3

@@ -19,10 +19,31 @@ import math
 import random
 from pathlib import Path
 
-import torch
-import torch.nn as nn
+torch = None
+nn = None
+load_examples = None
 
-from chess_probe_common import load_examples
+
+def load_runtime_dependencies() -> None:
+    global torch, nn, load_examples
+    if torch is None:
+        import torch as _torch
+        import torch.nn as _nn
+        from chess_probe_common import load_examples as _load_examples
+
+        torch = _torch
+        nn = _nn
+        load_examples = _load_examples
+
+
+def resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 # ---------------------------------------------------------------------------
@@ -68,36 +89,6 @@ def majority_baseline(labels) -> float:
     return max(ones, len(labels) - ones) / len(labels)
 
 
-# ---------------------------------------------------------------------------
-# MLP probe
-# ---------------------------------------------------------------------------
-
-
-class MLPProbe(nn.Module):
-    """Small MLP: input_dim -> hidden -> 1 (or hidden -> hidden -> 1).
-
-    Single hidden layer is the default. Two-hidden-layer variant is
-    available via --num-hidden-layers 2; rarely needed for d_model=512.
-    """
-
-    def __init__(self, input_dim: int, hidden: int, num_hidden_layers: int = 1,
-                 dropout: float = 0.0):
-        super().__init__()
-        layers: list[nn.Module] = []
-        d_in = input_dim
-        for _ in range(num_hidden_layers):
-            layers.append(nn.Linear(d_in, hidden))
-            layers.append(nn.ReLU())
-            if dropout > 0:
-                layers.append(nn.Dropout(dropout))
-            d_in = hidden
-        layers.append(nn.Linear(d_in, 1))
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x).squeeze(-1)
-
-
 def train_probe(
     train_x: torch.Tensor,
     train_y: torch.Tensor,
@@ -126,6 +117,26 @@ def train_probe(
     test_y = test_y.to(device)
     if pos_weight is not None:
         pos_weight = pos_weight.to(device)
+
+    class MLPProbe(nn.Module):
+        """Small MLP: input_dim -> hidden -> 1 (or hidden -> hidden -> 1)."""
+
+        def __init__(self, input_dim: int, hidden: int, num_hidden_layers: int = 1,
+                     dropout: float = 0.0):
+            super().__init__()
+            layers: list[nn.Module] = []
+            d_in = input_dim
+            for _ in range(num_hidden_layers):
+                layers.append(nn.Linear(d_in, hidden))
+                layers.append(nn.ReLU())
+                if dropout > 0:
+                    layers.append(nn.Dropout(dropout))
+                d_in = hidden
+            layers.append(nn.Linear(d_in, 1))
+            self.net = nn.Sequential(*layers)
+
+        def forward(self, x):
+            return self.net(x).squeeze(-1)
 
     probe = MLPProbe(train_x.shape[1], hidden, num_hidden_layers, dropout).to(device)
     optimizer = torch.optim.AdamW(probe.parameters(), lr=lr, weight_decay=weight_decay)
@@ -255,11 +266,8 @@ def probe_layer(
 
 
 def run(args) -> None:
-    # Pick device. Honor explicit --device, else use cuda if available.
-    if args.device == "auto":
-        device_str = "cuda" if torch.cuda.is_available() else "cpu"
-    else:
-        device_str = args.device
+    # Pick device. Honor explicit --device, else choose the best available backend.
+    device_str = resolve_device(args.device)
     device = torch.device(device_str)
 
     dataset_path = Path(args.dataset).expanduser().resolve()
@@ -355,11 +363,11 @@ def run(args) -> None:
         print(f"\nSaved per-fold metrics to {out_path}")
 
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train MLP legality probes on a saved dataset.")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--device", default="auto",
-                        help="'auto' (default), 'cuda', or 'cpu'.")
+                        help="'auto' (default), 'cpu', 'cuda', 'mps', or a torch device string.")
     # Probe architecture
     parser.add_argument("--hidden", type=int, default=64,
                         help="Hidden layer size (default 64).")
@@ -380,7 +388,13 @@ def main() -> None:
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--per-fold-csv", default=None)
-    run(parser.parse_args())
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    load_runtime_dependencies()
+    run(args)
 
 
 if __name__ == "__main__":

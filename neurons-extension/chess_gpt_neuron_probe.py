@@ -19,12 +19,31 @@ import math
 import random
 from pathlib import Path
 
-import torch
-
 from _paths import setup_paths, resolve_path
 setup_paths()
 
-from chess_probe_common_neurons import load_neuron_examples
+torch = None
+load_neuron_examples = None
+
+
+def load_runtime_imports() -> None:
+    global torch, load_neuron_examples
+    if torch is None:
+        import torch as _torch
+        from chess_probe_common_neurons import load_neuron_examples as _load_neuron_examples
+
+        torch = _torch
+        load_neuron_examples = _load_neuron_examples
+
+
+def resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 # Reuse the AUROC implementation from the linear probe by copy.
@@ -162,9 +181,7 @@ def top_neurons_from_weights(weights_per_fold, top_k=20):
 
 
 def run(args):
-    device_str = "cuda" if (args.device == "auto" and torch.cuda.is_available()) else args.device
-    if device_str == "auto":
-        device_str = "cpu"
+    device_str = resolve_device(args.device)
     device = torch.device(device_str)
 
     payload = load_neuron_examples(resolve_path(args.dataset))
@@ -245,10 +262,11 @@ def run(args):
         print(f"Saved top-neuron rankings to {path}")
 
 
-def main():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", required=True)
-    p.add_argument("--device", default="auto")
+    p.add_argument("--device", default="auto",
+                   help="'auto', 'cpu', 'cuda', 'mps', or a torch device string.")
     p.add_argument("--epochs", type=int, default=200)
     p.add_argument("--lr", type=float, default=1e-2)
     p.add_argument("--weight-decay", type=float, default=1e-2)
@@ -258,7 +276,13 @@ def main():
     p.add_argument("--per-fold-csv", default=None)
     p.add_argument("--top-neurons-csv", default=None)
     p.add_argument("--top-k", type=int, default=20)
-    run(p.parse_args())
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
+    load_runtime_imports()
+    run(args)
 
 
 if __name__ == "__main__":

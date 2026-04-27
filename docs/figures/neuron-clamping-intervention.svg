@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2563eb"/></marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#16a34a"/></marker>
+    <marker id="arrow-red" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#dc2626"/></marker>
+    <marker id="arrow-purple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#7c3aed"/></marker>
+    <style>
+      .title{font:700 34px Arial, sans-serif; fill:#0f172a} .subtitle{font:400 18px Arial, sans-serif; fill:#475569}
+      .label{font:700 17px Arial, sans-serif; fill:#0f172a} .small{font:400 14px Arial, sans-serif; fill:#475569}
+      .tiny{font:400 12px Arial, sans-serif; fill:#64748b} .mono{font:500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill:#0f172a}
+      .piece{font:700 38px Arial, sans-serif; fill:#0f172a} .badge{font:700 14px Arial, sans-serif; fill:#ffffff}
+    </style>
+  </defs><rect width="100%" height="100%" fill="#f8fafc"/>
+<text x="60" y="70" class="title" text-anchor="start">Neuron clamping</text>
+<text x="60" y="102" class="subtitle" text-anchor="start">Selected activation dimensions are fixed during generation to test causal effects on move legality.</text>
+<rect x="70" y="180" width="240" height="130" rx="22" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+<text x="95" y="225" class="label" text-anchor="start">PGN prompt</text>
+<text x="95" y="260" class="small" text-anchor="start">Move history (tokenized input)</text>
+<line x1="310" y1="245" x2="330" y2="245" stroke="#2563eb" stroke-width="5" marker-end="url(#arrow-blue)"/><rect x="345" y="180" width="230" height="130" rx="22" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+<text x="370" y="225" class="label" text-anchor="start">Forward pass</text>
+<text x="370" y="260" class="small" text-anchor="start">Compute activations at</text>
+<text x="370" y="280" class="small" text-anchor="start">selected layer</text>
+<line x1="585" y1="245" x2="605" y2="245" stroke="#2563eb" stroke-width="5" marker-end="url(#arrow-blue)"/><rect x="620" y="180" width="230" height="130" rx="22" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+<text x="645" y="225" class="label" text-anchor="start">Clamp selected neurons</text>
+<text x="645" y="260" class="small" text-anchor="start">Fix chosen dimensions to</text>
+<text x="645" y="280" class="small" text-anchor="start">constant values</text>
+<line x1="860" y1="245" x2="880" y2="245" stroke="#2563eb" stroke-width="5" marker-end="url(#arrow-blue)"/><rect x="895" y="180" width="230" height="130" rx="22" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+<text x="920" y="225" class="label" text-anchor="start">Generate move</text>
+<text x="920" y="260" class="small" text-anchor="start">Compare legality outcomes</text>
+<rect x="220" y="390" width="760" height="210" rx="24" fill="#fff" stroke="#cbd5e1" stroke-width="1" filter="url(#shadow)"/>
+<text x="255" y="435" class="label" text-anchor="start">MLP activation vector (single layer)</text>
+<rect x="265" y="520" width="28" height="35" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="320" y="500" width="28" height="55" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="375" y="527" width="28" height="28" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="430" y="477" width="28" height="78" rx="7" fill="#7c3aed" opacity="0.9"/><circle cx="444" cy="462" r="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/><rect x="485" y="510" width="28" height="45" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="540" y="460" width="28" height="95" rx="7" fill="#7c3aed" opacity="0.9"/><circle cx="554" cy="445" r="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/><rect x="595" y="533" width="28" height="22" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="650" y="490" width="28" height="65" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="705" y="515" width="28" height="40" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="760" y="467" width="28" height="88" rx="7" fill="#7c3aed" opacity="0.9"/><circle cx="774" cy="452" r="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/><rect x="815" y="503" width="28" height="52" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="870" y="525" width="28" height="30" rx="7" fill="#94a3b8" opacity="0.9"/><rect x="730" y="400" width="185" height="30" rx="15.0" fill="#7c3aed"/><text x="822.5" y="420.0" class="badge" text-anchor="middle">CLAMPED ACTIVATION</text>
+<text x="255" y="585" class="small" text-anchor="start">Compare generated moves with and without clamping to measure causal impact on legality.</text>
+</svg>

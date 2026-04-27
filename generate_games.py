@@ -51,6 +51,16 @@ def load_runtime_dependencies() -> None:
         chess = require("chess")
 
 
+def resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
@@ -368,8 +378,7 @@ def run(args) -> None:
     load_runtime_dependencies()
     if args.positions < 1:
         raise SystemExit("--positions must be at least 1.")
-    if args.device == "auto":
-        args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    args.device = resolve_device(args.device)
 
     chess_gpt = ChessGPT(Path(args.repo).expanduser().resolve(), args.checkpoint, args.device)
     print(f"Loaded model: {chess_gpt.n_layers} layers, tokenizer={chess_gpt.tokenizer_kind}")
