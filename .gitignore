@@ -39,3 +39,5 @@ runs/
 chess_gpt_eval/
 nanogpt/out/
 nanogpt/activations/
+__pycache__/
+*.pyc
