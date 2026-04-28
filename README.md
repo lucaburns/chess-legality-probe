@@ -106,7 +106,26 @@ with care: a change under clamping is evidence that the perturbed activations
 matter for this generation setup, but it does not by itself identify a clean,
 human-interpretable legality neuron.
 
+## Updates and Writeups
+
+Progress writeups are in [`docs/updates/`](docs/updates/):
+
+- [`docs/updates/4-22-Update.md`](docs/updates/4-22-Update.md) — Initial
+  pipeline setup, probe design, and what to look for in a full run.
+- [`docs/updates/4-26-Update.md`](docs/updates/4-26-Update.md) — Extended
+  results: MLP probe, neuron-level probe, activation clamping, and inline plots.
+
+SVG diagrams referenced by those writeups are in [`docs/figures/`](docs/figures/).
+
 ## Project Layout
+
+- `download_model.py`
+  Downloads the `stockfish_16layers_ckpt_no_optimizer.pt` checkpoint from
+  HuggingFace and places it in the expected location. Run this once after
+  cloning:
+  ```bash
+  uv run python download_model.py
+  ```
 
 - `generate_games.py`
   Generates PGN-prompted self-play examples, legality labels, and residual
@@ -120,6 +139,18 @@ human-interpretable legality neuron.
 
 - `chess_probe_common.py`
   Shared dataset schema and save/load helpers for residual-stream datasets.
+
+- `plot_comparison.py`
+  Generates headline comparison plots (AUROC by layer across probe types,
+  clamping sweep results) from the per-fold CSV files. Does not require the
+  full activation dataset.
+
+- `plot_ply_analysis.py`
+  Generates a plot of probe AUROC as a function of game depth (ply). Requires
+  the full activation `.pt` dataset.
+
+- `plot_probe_distribution.py`
+  Per-layer AUROC and accuracy strip/sina plots for a single probe CSV.
 
 - `neurons-extension/generate_games_with_neurons.py`
   Generates datasets with both residual stream activations and post-GELU MLP
@@ -148,6 +179,37 @@ human-interpretable legality neuron.
 - `neurons-extension/configs/generation_neurons.yaml`
   Dataset-generation defaults for the neuron/MLP activation pipeline.
 
+## Configuration Reference
+
+### `configs/generation.yaml` — dataset generation
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `paths.chess_gpt_eval_repo` | `../chess_gpt_eval` | Path to the companion chess_gpt_eval repository (contains the model code and checkpoint directory). |
+| `paths.checkpoint` | `stockfish_16layers_ckpt_no_optimizer.pt` | Filename of the model checkpoint inside `chess_gpt_eval/nanogpt/out/`. |
+| `paths.output_dataset` | `data/stockfish16_t1p3_n4000.pt` | Where the generated `.pt` dataset is written. |
+| `generation.device` | `auto` | Compute device. `auto` picks CUDA → MPS → CPU. |
+| `generation.positions` | `30000` | Number of (position, candidate move, legality label) examples to collect. |
+| `generation.max_plies` | `160` | **Maximum game length in plies** (a *ply* is one player's move, so 160 plies = 80 full moves). Games that haven't ended naturally are truncated here. |
+| `generation.temperature` | `1.3` | Sampling temperature. Higher values make the model more random and produce more illegal moves. |
+| `generation.top_k` | `200` | Top-k sampling cutoff for move generation. |
+| `generation.max_new_tokens` | `10` | Maximum token budget when sampling one move. |
+| `generation.random_opening_plies` | `2` | Number of initial plies played with uniform-random moves to diversify starting positions. |
+| `generation.stop_on_illegal` | `true` | **What happens when the model generates an illegal move.** When `true` (default): the illegal example is recorded and the game ends immediately. When `false`: the illegal example is still recorded, but the game continues — an actual legal move is pushed to the board so subsequent positions are reachable. Setting this to `false` lets you collect more illegal examples, but the board states that follow an illegal move are not positions the model navigated to on its own. |
+| `generation.seed` | `1` | Random seed for reproducibility. |
+
+### `configs/probe.yaml` — probe training
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `paths.dataset` | `data/stockfish16_t1p3_n4000.pt` | Dataset to train probes on. |
+| `probe.epochs` | `200` | Training epochs per fold. |
+| `probe.lr` | `0.01` | Learning rate. |
+| `probe.weight_decay` | `0.01` | L2 regularization. |
+| `probe.folds` | `5` | Number of cross-validation folds. |
+| `probe.seed` | `7` | Fold-split seed. |
+| `probe.no_pos_weight` | `false` | When `false` (default), class imbalance is corrected by upweighting the rare illegal-move class in the loss. Set to `true` to train without this correction. |
+
 ## Setup
 
 Clone the companion Chess-GPT repository next to this project and install the
@@ -158,17 +220,17 @@ git clone https://github.com/adamkarvonen/chess_gpt_eval.git ../chess_gpt_eval
 uv sync --python 3.12
 ```
 
-Download a checkpoint from <https://huggingface.co/adamkarvonen/chess_llms>
-and place it in:
+Download the model checkpoint automatically:
 
-```text
-../chess_gpt_eval/nanogpt/out/
+```bash
+uv run python download_model.py
 ```
 
-The commonly used checkpoint is:
+Or download manually from <https://huggingface.co/adamkarvonen/chess_llms>
+and place the file at:
 
 ```text
-stockfish_16layers_ckpt_no_optimizer.pt
+../chess_gpt_eval/nanogpt/out/stockfish_16layers_ckpt_no_optimizer.pt
 ```
 
 This repository depends on plain `torch` rather than a CUDA-specific wheel.
@@ -278,6 +340,26 @@ uv run python neurons-extension/plot_neuron_results.py \
   --top-neurons-csv data/top_neurons.csv \
   --direction-csv data/direction_analysis.csv \
   --out plots/neurons
+```
+
+Generate headline comparison plots from the per-fold CSVs (no dataset needed):
+
+```bash
+uv run python plot_comparison.py \
+  --linear-csv  data/per_fold_t1p3_n30000.csv \
+  --mlp-csv     data/per_fold_mlp_t1p3_n30000.csv \
+  --neuron-csv  data/per_fold_neurons.csv \
+  --clamp-csv   data/clamp_sweep_results.csv \
+  --out         plots/
+```
+
+Generate the per-ply AUROC plot (requires the full `.pt` dataset):
+
+```bash
+uv run python plot_ply_analysis.py \
+  --dataset data/stockfish16_t1p3_n30000.pt \
+  --layer 12 \
+  --out plots/auroc_by_ply.png
 ```
 
 Because dataset generation is the expensive step, the intended pattern is to
